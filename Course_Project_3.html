@@ -137,6 +137,7 @@ train_tree_tL100_pca</code></pre>
 <h3>Random Forest Model</h3>
 <p>The second model we build is train_forest biult from Random Forest based on “rf”&quot; package utilized through “caret” package.The tuning parameter is mtry number of variable randomly selected for each tree. All parameters are standard, including the k-fold = 10 for Cross Validation. The best result based on Accuracy is obtain with Randomly Selected Predictors = 2. The Accuracy is about 99.5%. We don’t apply any preprocessing to this model as pca and center and scale didn’t imporve accuracy in the tree based models.</p>
 <pre class="r"><code>set.seed(1803)
+library(randomForest)
 traincontrol &lt;- trainControl(method = &quot;cv&quot;)
 train_forest &lt;- train(classe ~ ., data = training_4, method =&quot;rf&quot;,
                       trControl = traincontrol) 
@@ -260,29 +261,24 @@ grid.arrange(plot_tree,plot_tree_100, plot_tree_100_cs, plot_tree_100_pca, plot_
 </tbody>
 </table>
 </div>
-<div id="selected-model-and-20-test-cases-prediciotn" class="section level2">
-<h2>Selected Model and 20 test cases prediciotn</h2>
-<p>According to the result showed in the previous chapter, we select the model with highest Accuracy, that is the Random Forest. This model is estimated, through Cross validation, to provide an Accuracy of 99.5% with a Standard Deviation of 0.2%. In this chapter we apply the selected model to the test data set, that consists of 20 observations.</p>
-<pre class="r"><code>library(mice)
-testing &lt;- read.csv(&quot;pml-testing.csv&quot;)
+<div id="selected-model-and-20-test-cases-prediction" class="section level2">
+<h2>Selected Model and 20 test cases prediction</h2>
+<p>According to the result showed in the previous chapter, we select the model with highest Accuracy, that is the <strong>Random Forest</strong>. This model is estimated, through <strong>Cross validation</strong>, to provide an <strong>Accuracy of 99.5% with a Standard Deviation of 0.2%</strong>.</p>
+<p>In this chapter we apply the selected model to the test data set, that consists of 20 observations. Before applying the model, we must process the test data selecting only the features we included in the training set. The resulting test set is testing_2 including 52 features and 20 observation with no NA values.</p>
+<pre class="r"><code>testing &lt;- read.csv(&quot;pml-testing.csv&quot;)
 
-testing_2 &lt;- testing[,-c(1:7)]
-md.pattern(testing_2)
+n_col &lt;- names(training_4[,-53])
+testing_2 &lt;- testing[,n_col]
+sum(is.na(testing_2))
 
-na_col &lt;- apply(training_2, 2, na_num &lt;- function(x) {sum(is.na(x))})
-i_na_col &lt;- na_col == 0
-training_3 &lt;- training_2[,i_na_col]
-summary(training_3)
 
-empty_col &lt;- apply(training_3, 2, empty_f &lt;- function(x) {sum(x == &quot;&quot;)})
-i_col2 &lt;- empty_col == 0
-training_4 &lt;- training_3[,i_col2]</code></pre>
+pred_classe &lt;- predict(train_forest, newdata = testing_2)</code></pre>
+<p>The model applied to the testing_2 data, provides the outcome with 5 possible levels (“A”, “B”, “C”, “D”, “E”). The outcome is as follows, ordered according to observation order in testing_2. Predicted Classe: <strong>1.B 2.A 3.B 4.A 5.A 6.E 7.D 8.B 9.A 10.A 11.B 12.C 13.B 14.A 15.E 16.E 17.A 18.B 19.B 20.B</strong>.</p>
 </div>
 <div id="precict-the-20-cases-of-test-set" class="section level2">
 <h2>Precict the 20 cases of test set</h2>
 <p>You should also apply your machine learning algorithm to the 20 test cases available in the test data above. Please submit your predictions in appropriate format to the programming assignment for automated grading. See the programming assignment for additional details.</p>
 <p>Submission should consist of a link to a Github repo with your R markdown and compiled HTML file describing your analysis. Constrain the text of the writeup to &lt; 2000 words and the number of figures to be less than 5. It will make it easier for the graders if you submit a repo with a gh-pages branch so the HTML page can be viewed online (and you always want to make it easy on graders :-).</p>
-<p><a href="http://lucavignali.github.io/Machine_Learing_Course_Project/Course_Project.html" class="uri">http://lucavignali.github.io/Machine_Learing_Course_Project/Course_Project.html</a></p>
 </div>
 <div id="evaluation-criteria" class="section level2">
 <h2>Evaluation Criteria</h2>
