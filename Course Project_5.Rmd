@@ -1,0 +1,220 @@
+---
+title: "Machine Learning Course Project"
+author: "Luca Vignali"
+date: "23 October 2015"
+output: html_document
+---
+
+## Introduction
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the **quantified** self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health - to find patterns in their behavior, or because they are tech geeks. 
+
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this project, we will use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+The training set and test set can be obtained from the following links:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+
+
+## Training Set description and feature selection
+The Training set includes 19622 observation of 159 variables plus the outcome, that is the *classe* variable.
+Out of 159 variables, the columns 1 to 7 are removed in the generated training_2 data as they can't be considered predictors: they are not measures from the measurements equipments.
+
+The obtain data set, analyzed with md.pattern function, shows 19216 observations out of 19622 with NA values in 67 variables. Assuming as general practise to remove variables with more than 5% of NA values, we remove those 67 variables and generate a new data set training_3.
+
+Finally we detect with summary function, that the 33 variables have 19216 empty cases. For the same reason above, we remove those variables and generate training_4, which includes 19622 observations of *52 variables* that will be used as features to predict the classe outcome. 
+
+
+```{r, data_cleaning, eval=FALSE}
+library(mice)
+training <- read.csv("pml-training.csv")
+
+training_2 <- training[,-c(1:7)]
+md.pattern(training_2)
+
+na_col <- apply(training_2, 2, na_num <- function(x) {sum(is.na(x))})
+i_na_col <- na_col == 0
+training_3 <- training_2[,i_na_col]
+summary(training_3)
+
+empty_col <- apply(training_3, 2, empty_f <- function(x) {sum(x == "")})
+i_col2 <- empty_col == 0
+training_4 <- training_3[,i_col2]
+```
+
+
+## Models Creation and Cross Validation 
+In this chapter we explain how we built the prediction models utilizing all 52 available predictors. The model have been selected from the ones explained during the course "Practical Machine Learning". We will use **Accuracy estimated through Cross Validation to select the best model**.
+
+As the classe variable is categorical - it has 5 possible values (A,B,C,D) - we don't utilize regression models. The simplest model we use is the Tree Classification based on rpart package.
+
+### Simple Tree Model (rpart package)
+The first tree model, train_tree, is generated with standard *tuneLength* caret package values = 3, applying Cross Validation with standard k-fold method with k = 10. The obtain model is optimized with complexity parameter cp=0.036 and provides a **51% Accuracy** estimated through cross validation. 
+
+In order to increase accuracy, we create a more complex tree, train_tree_tL100, by increasing to 100 the tuneLength value. The obtained model is optimized with complexity parameter cp = 0, and provides **Accuracy equal to 94%**. As the cp value is at the minimum, we don't explore anymore basic tree modelling, but in the next chapter we will explore the impact of pre-processing on this model.
+
+
+
+```{r, tree_creation, eval=FALSE}
+library(caret)
+library(rpart)
+str(training$classe)
+set.seed(1803)
+traincontrol <- trainControl(method = "cv")
+train_tree <- train(classe ~ ., data = training_4, method = "rpart",
+                       trControl = traincontrol)
+train_tree
+
+set.seed(1803)
+traincontrol <- trainControl(method = "cv")
+train_tree_tL100 <- train(classe ~ ., data = training_4, method = "rpart",
+                           trControl = traincontrol, tuneLength = 100)
+train_tree_tL100
+
+```
+
+
+#### Pre-Processing with Center and Scale
+We apply simple *Centering and Scaling* to the training_4 training set and we evaluate the impact on the best performing model created in the previous paragraph. The obtained train_tree_tL100_cs is optimized with cp = 0,  the estimated **Accuracy is equal to 94%** as in the previous model. So there is no clear advantage to apply the Center and Scale pre-processing.
+
+```{r, scale_center, eval=FALSE}
+set.seed(1803)
+traincontrol <- trainControl(method = "cv")
+train_tree_tL100_cs <- train(classe ~ ., data = training_4, method = "rpart",
+                          trControl = traincontrol, tuneLength = 100, 
+                          preProcess = c("center", "scale"))
+train_tree_tL100_cs
+
+```
+
+
+#### Pre-Processing with Principal Component Analysis
+We now evaluate the impact of *Principal Component Analysis (PCA)* on Accuracy in the training_4 data set. The obtained train_tree_tL100_pca is optimized with cp = 0, as in the previous model, while the estimated **Accuracy is equal to 82%**. As the estimated Standard Deviation of the Accuracy is about 1%, we can conlude that the PCA is reducing Accuracy.
+
+```{r, pca, eval=FALSE}
+set.seed(1803)
+traincontrol <- trainControl(method = "cv")
+train_tree_tL100_pca <- train(classe ~ ., data = training_4, method = "rpart",
+                          trControl = traincontrol, tuneLength = 100, 
+                          preProcess = "pca")
+train_tree_tL100_pca
+
+```
+
+
+### Random Forest Model (randomForest package)
+The second model we build is train_forest biult from Random Forest based on "rf" method utilized through "caret" package.The tuning parameter is mtry number of variable randomly selected for each tree. All parameters are standard, including the k-fold = 10 for Cross Validation.
+The best result based on Accuracy is obtain with Randomly Selected Predictors = 2. **The Accuracy is about 99%**.
+We don't apply any preprocessing to this model as pca and center and scale didn't imporve accuracy in the tree based models.
+
+```{r, rf, eval=FALSE}
+set.seed(1803)
+library(randomForest)
+traincontrol <- trainControl(method = "cv")
+train_forest <- train(classe ~ ., data = training_4, method ="rf",
+                      trControl = traincontrol) 
+train_forest
+
+```
+
+
+### Bagging Model (earth package)
+The third and last model we build is train_bagFDA, obtained through caret package based on earth and mda packages to perform Flexible Discriminant Analysis. The tuning parameter is the degree (complexity of the models combination) and nprune to prune the trees. All parameter are caret standard including k-fold = 10 for cross validation. The caret output model train_badFDA, has beed obtained with constant degree = 1 and nprune = 17, providing **Accuracy of about 69%**.
+
+```{r, bag, eval=FALSE}
+library(earth)
+set.seed(1803)
+traincontrol <- trainControl(method = "cv")
+train_bagFDA <- train(classe ~ ., data = training_4, method ="bagFDA",
+                      trControl = traincontrol) 
+train_bagFDA
+```
+
+
+## Cross Validation - Out of Sample Error
+In the previous paragraph we created several ML models and tested them using k-fold Cross Validation Technique. In all casses we selected the caret default k=10. The analyzed ML model type are:
+
+* Tree based.
+* Tree based with Center and Scale pre-processing.
+* Tree based with Principal Component Analysis pre-processing.
+* Random Forest.
+* Bagging.
+
+For each model type we created several models based on tuning parameters, and compared them based on Accuracy estimated through Cross Validation. The tuning parameters depends on the model. In the following table we summarize all the models and tuning parameters we analyzed in the previous paragraph.
+
+
+|     Model     |                Tuning Parameters               |
+|:-------------:|:----------------------------------------------:|
+| Tree          | Complexity Parameter (cp) - 3 values           |
+| Tree100       | Complexity Parameter (cp) - 100 values         |
+| Tree100 CS    | Complexity Parameter (cp) - 100 Values         |
+| Tree100 PCA   | Complexity Parameter (cp) - 100 Values         |
+| Random Forest | Randomly Selected Predictors (mtry) - 3 Values |
+| Bagging FDA   | Tree Pruning parameter (nprune) - 3 Values     |
+
+
+All the models are then evaluated through k-fold Cross Validation to obtain Accuracy and Accuracy Standard Deviation. As explained in the next chapter.
+
+The out of Sample Error is estimated in terms of Accuracy with the k-fold Cross Validation, with k=10 as standard value in caret package. The obtained Accuracy are shown in the following picture.
+
+```{r, error, eval = FALSE}
+library(ggplot2)
+library(gridExtra)
+plot_tree <- plot(train_tree, main = "Tree")
+plot_tree_100 <- plot(train_tree_tL100, main = "Tree100")
+plot_tree_100_cs <- plot(train_tree_tL100_cs, main = "Tree100 CS")
+plot_tree_100_pca <- plot(train_tree_tL100_pca, main = "Tree100 PCA")
+plot_forest <- plot(train_forest, main = "Random Forest")
+plot_bagging <- plot(train_bagFDA, main = "Bagging FDA")
+
+grid.arrange(plot_tree,plot_tree_100, plot_tree_100_cs, plot_tree_100_pca, plot_forest, plot_bagging,ncol=3, nrow = 2, main = "Model Accuracy Comparison")
+
+
+
+```
+
+
+![Accuracy]( .\images\Models_Accuracy.png)
+
+The picture above shows the Accuracy as a function of the caret tuning parameter, that depends on the model type. For each tuned model we select the tuning parameter that miximizes Accuracy, as reported in the following table where awe added the Accuracy Standard Deviation to have a measure of the Accuracy dispersion.
+
+|     Model     |       Best Tuning Parameter Value       | Accuracy | Accuracy Standard Deviation |
+|:-------------:|:---------------------------------------:|:--------:|:---------------------------:|
+| Tree          | Complexity Parameter (cp) = 0.036       | 51%      | 2%                          |
+| Tree100       | Complexity Parameter (cp) = 0           | 94%      | 0.4%                        |
+| Tree100 CS    | Complexity Parameter (cp) = 0           | 94%      | 0.4%                        |
+| Tree100 PCA   | Complexity Parameter (cp) = 0           | 82%      | 1.2%                        |
+| Random Forest | Randomly Selected Predictors (mtry) = 2 | 99.5%    | 0.2%                        |
+| Bagging FDA   | Tree Pruning parameter (nprune) = 17    | 69%      | 1.1%                        |
+
+
+
+## Selected Model and 20 test cases prediction
+According to the result showed in the previous chapter, we select the model with highest Accuracy, that is the **Random Forest**. This model is estimated, through **Cross validation**, to provide an **Accuracy of 99.5% with a Standard Deviation of 0.2%**. We thus expect that the out-of-sample error is less then 1%.
+
+In this chapter we apply the selected model to the test data set, that consists of 20 observations. Before applying the model, we must process the test data selecting only the features we included in the training set. The resulting test set is testing_2 including 52 features and 20 observation with no NA values. 
+
+
+
+```{r, prediction, eval=FALSE}
+
+testing <- read.csv("pml-testing.csv")
+
+n_col <- names(training_4[,-53])
+testing_2 <- testing[,n_col]
+sum(is.na(testing_2))
+
+
+pred_classe <- predict(train_forest, newdata = testing_2)
+```
+
+The model applied to the testing_2 data, provides the outcome with 5 possible levels ("A", "B", "C", "D", "E"). The outcome is as follows, ordered according to observation order in testing_2. Predicted Classe: **1.B 2.A 3.B 4.A 5.A 6.E 7.D 8.B 9.A 10.A 11.B 12.C 13.B 14.A 15.E 16.E 17.A 18.B 19.B 20.B**.
+
+
+
+
+
